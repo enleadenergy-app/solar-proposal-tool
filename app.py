@@ -3,8 +3,9 @@ import sys
 import subprocess
 import os
 import datetime
+from PIL import Image
 
-# --- 1. FORCE INSTALL FPDF ---
+# --- 1. FORCE INSTALL FPDF & PILLOW ---
 try:
     from fpdf import FPDF
 except ImportError:
@@ -33,28 +34,31 @@ def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_
     # --- PAGE 1: COVER ---
     pdf.add_page()
     
-    # 1. Background Image
+    # 1. Background Image (Auto-Convert to JPG)
     if bg_image:
-        bg_ext = os.path.splitext(bg_image.name)[1].lower()
-        bg_path = f"temp_bg{bg_ext}"
-        with open(bg_path, "wb") as f:
-            f.write(bg_image.getbuffer())
         try:
-            pdf.image(bg_path, x=0, y=120, w=210)
-        except:
-            st.error("Error loading background image.")
+            # Open image with Pillow to handle formats like PNG/WEBP
+            img = Image.open(bg_image)
+            # Convert to RGB (Standard JPG mode) to remove transparency issues
+            img = img.convert('RGB')
+            img.save("temp_bg.jpg")
+            # Place at bottom
+            pdf.image("temp_bg.jpg", x=0, y=120, w=210)
+        except Exception as e:
+            st.error(f"Background Image Error: {e}")
 
-    # 2. Company Logo
+    # 2. Company Logo (Auto-Convert to JPG)
     if logo_image:
-        logo_ext = os.path.splitext(logo_image.name)[1].lower()
-        logo_path = f"temp_logo{logo_ext}"
-        with open(logo_path, "wb") as f:
-            f.write(logo_image.getbuffer())
         try:
-            pdf.image(logo_path, x=10, y=10, w=30)
+            logo = Image.open(logo_image)
+            logo = logo.convert('RGB')
+            logo.save("temp_logo.jpg")
+            
+            # Place logo at top left
+            pdf.image("temp_logo.jpg", x=10, y=10, w=30)
             pdf.ln(20)
-        except:
-            st.error("Error loading logo.")
+        except Exception as e:
+            st.error(f"Logo Error: {e}")
     else:
         pdf.ln(10)
 
@@ -157,11 +161,13 @@ co_email = st.sidebar.text_input("Email", "info@enlead.com")
 
 st.sidebar.markdown("---")
 st.sidebar.write("**Upload Images Here**")
-logo_image = st.sidebar.file_uploader("Upload Company Logo", type=['png', 'jpg', 'jpeg'])
-bg_image = st.sidebar.file_uploader("Upload Cover Art", type=['jpg', 'png', 'jpeg'])
+logo_image = st.sidebar.file_uploader("Upload Company Logo", type=['png', 'jpg', 'jpeg', 'webp'])
+bg_image = st.sidebar.file_uploader("Upload Cover Art", type=['jpg', 'png', 'jpeg', 'webp'])
 
 if logo_image:
-    st.sidebar.text("Logo loaded successfully")
+    st.sidebar.success("Logo Loaded!")
+if bg_image:
+    st.sidebar.success("Cover Art Loaded!")
 
 # MAIN AREA
 col1, col2 = st.columns(2)
@@ -199,10 +205,11 @@ if st.button("Generate PDF Proposal"):
     
     pdf_bytes = create_pdf(company_info, customer_info, edited_data, total_val, bg_image, logo_image)
     
-    st.success("PDF Generated! Click below to download.")
-    st.download_button(
-        label="Download Proposal PDF",
-        data=pdf_bytes,
-        file_name=f"Proposal_{cust_name.replace(' ', '_')}.pdf",
-        mime='application/pdf'
-    )
+    if pdf_bytes:
+        st.success("PDF Generated! Click below to download.")
+        st.download_button(
+            label="Download Proposal PDF",
+            data=pdf_bytes,
+            file_name=f"Proposal_{cust_name.replace(' ', '_')}.pdf",
+            mime='application/pdf'
+        )
