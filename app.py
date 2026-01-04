@@ -34,27 +34,23 @@ def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_
     # --- PAGE 1: COVER ---
     pdf.add_page()
     
-    # 1. Background Image (Auto-Convert to JPG)
+    # 1. Background Image (FULL PAGE)
     if bg_image:
         try:
-            # Open image with Pillow to handle formats like PNG/WEBP
             img = Image.open(bg_image)
-            # Convert to RGB (Standard JPG mode) to remove transparency issues
             img = img.convert('RGB')
             img.save("temp_bg.jpg")
-            # Place at bottom
-            pdf.image("temp_bg.jpg", x=0, y=120, w=210)
+            # x=0, y=0, w=210, h=297 (Full A4 Size)
+            pdf.image("temp_bg.jpg", x=0, y=0, w=210, h=297)
         except Exception as e:
             st.error(f"Background Image Error: {e}")
 
-    # 2. Company Logo (Auto-Convert to JPG)
+    # 2. Company Logo
     if logo_image:
         try:
             logo = Image.open(logo_image)
             logo = logo.convert('RGB')
             logo.save("temp_logo.jpg")
-            
-            # Place logo at top left
             pdf.image("temp_logo.jpg", x=10, y=10, w=30)
             pdf.ln(20)
         except Exception as e:
@@ -80,8 +76,8 @@ def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_
     pdf.ln(15)
     
     # 5. Customer Details Box
-    pdf.set_fill_color(245, 245, 245)
-    pdf.rect(10, 90, 190, 60, 'F')
+    pdf.set_fill_color(245, 245, 245) 
+    pdf.rect(10, 90, 190, 75, 'F') # Increased height for extra field
     
     pdf.set_y(95)
     pdf.set_font("Arial", "B", 12)
@@ -95,9 +91,15 @@ def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_
     pdf.cell(0, 8, f"Location: {customer_info['address']}", 0, 1)
     pdf.cell(15)
     pdf.cell(0, 8, f"Date: {customer_info['date']}", 0, 1)
+
+    # Valid Until (Red Text)
+    pdf.cell(15)
+    pdf.set_text_color(200, 0, 0)
+    pdf.cell(0, 8, f"Valid Until: {customer_info['valid_until']}", 0, 1)
+    pdf.set_text_color(0, 0, 0)
     
-    # System Type
-    pdf.ln(5)
+    # System Type (Green Text)
+    pdf.ln(2)
     pdf.cell(15)
     pdf.set_font("Arial", "B", 12)
     pdf.set_text_color(0, 100, 0) 
@@ -178,6 +180,8 @@ with col1:
 with col2:
     sys_type = st.selectbox("System Type", ["On-Grid (Net Metered)", "Off-Grid (Battery)", "Hybrid System"])
     sys_size = st.text_input("System Capacity", "5kW")
+    # New Valid Until Field (Default: 15 days from now)
+    valid_until = st.date_input("Valid Until", datetime.date.today() + datetime.timedelta(days=15))
 
 st.subheader("Bill of Materials & Pricing")
 
@@ -199,6 +203,7 @@ if st.button("Generate PDF Proposal"):
         'name': cust_name, 
         'address': cust_addr, 
         'date': prop_date, 
+        'valid_until': valid_until,
         'system_size': sys_size,
         'system_type': sys_type
     }
