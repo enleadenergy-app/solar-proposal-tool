@@ -1,9 +1,10 @@
 import streamlit as st
 import sys
 import subprocess
+import os
 import datetime
 
-# --- 1. FORCE INSTALL FPDF (Fixes the error automatically) ---
+# --- 1. FORCE INSTALL FPDF ---
 try:
     from fpdf import FPDF
 except ImportError:
@@ -32,27 +33,37 @@ def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_
     # --- PAGE 1: COVER ---
     pdf.add_page()
     
-    # 1. Background Image (Kerala Doodle)
+    # 1. Background Image
     if bg_image:
-        with open("temp_bg.jpg", "wb") as f:
+        bg_ext = os.path.splitext(bg_image.name)[1].lower()
+        bg_path = f"temp_bg{bg_ext}"
+        with open(bg_path, "wb") as f:
             f.write(bg_image.getbuffer())
-        # Place at bottom
-        pdf.image("temp_bg.jpg", x=0, y=120, w=210)
+        try:
+            pdf.image(bg_path, x=0, y=120, w=210)
+        except:
+            st.error("Error loading background image.")
 
-    # 2. Company Logo (Top Left)
+    # 2. Company Logo
     if logo_image:
-        with open("temp_logo.png", "wb") as f:
+        logo_ext = os.path.splitext(logo_image.name)[1].lower()
+        logo_path = f"temp_logo{logo_ext}"
+        with open(logo_path, "wb") as f:
             f.write(logo_image.getbuffer())
-        # Place logo at top left (x=10, y=10, width=30)
-        pdf.image("temp_logo.png", x=10, y=10, w=30)
-        pdf.ln(20)
+        try:
+            pdf.image(logo_path, x=10, y=10, w=30)
+            pdf.ln(20)
+        except:
+            st.error("Error loading logo.")
+    else:
+        pdf.ln(10)
 
-    # 3. Company Name (Top Right)
+    # 3. Company Name
     pdf.set_xy(50, 15)
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, company_info['name'], 0, 1, 'R')
     pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 5, "Powering the Future", 0, 1, 'R')
+    pdf.cell(0, 5, "Powering a Sustainable Future", 0, 1, 'R')
 
     # 4. Proposal Title
     pdf.ln(30)
@@ -66,7 +77,7 @@ def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_
     
     # 5. Customer Details Box
     pdf.set_fill_color(245, 245, 245)
-    pdf.rect(10, 90, 190, 70, 'F') # Increased height for extra date
+    pdf.rect(10, 90, 190, 60, 'F')
     
     pdf.set_y(95)
     pdf.set_font("Arial", "B", 12)
@@ -81,18 +92,11 @@ def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_
     pdf.cell(15)
     pdf.cell(0, 8, f"Date: {customer_info['date']}", 0, 1)
     
-    # NEW: Valid Until Date
-    pdf.set_font("Arial", "B", 12)
-    pdf.set_text_color(200, 0, 0) # Red color for urgency
-    pdf.cell(15)
-    pdf.cell(0, 8, f"Valid Until: {customer_info['valid_until']}", 0, 1)
-    pdf.set_text_color(0, 0, 0) # Reset color
-
     # System Type
-    pdf.ln(2)
+    pdf.ln(5)
     pdf.cell(15)
     pdf.set_font("Arial", "B", 12)
-    pdf.set_text_color(0, 100, 0) # Dark Green
+    pdf.set_text_color(0, 100, 0) 
     pdf.cell(0, 8, f"System Type: {customer_info['system_type']}", 0, 1)
     pdf.set_text_color(0, 0, 0) 
 
@@ -105,7 +109,7 @@ def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_
 
     # Table Header
     pdf.set_font("Arial", "B", 10)
-    pdf.set_fill_color(230, 240, 255) 
+    pdf.set_fill_color(230, 240, 255)
     pdf.cell(15, 10, "#", 1, 0, 'C', 1)
     pdf.cell(90, 10, "Item Description", 1, 0, 'C', 1)
     pdf.cell(20, 10, "Qty", 1, 0, 'C', 1)
@@ -140,31 +144,34 @@ def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 3. STREAMLIT UI ---
-st.set_page_config(page_title="Solar Proposal Generator", page_icon="☀️")
+st.set_page_config(page_title="Enlead Proposal Tool")
 
-st.title("☀️ Solar Proposal Generator")
-st.markdown("Generate a professional Solar Proposal PDF.")
+st.title("Solar Proposal Generator")
+st.markdown("Generate a PDF proposal with Logo & System Type.")
 
 # SIDEBAR
 st.sidebar.header("Company Details")
-# Editable Phone Number Default
 co_name = st.sidebar.text_input("Company Name", "Enlead Energy Solutions")
 co_phone = st.sidebar.text_input("Phone", "+91-9876543210")
 co_email = st.sidebar.text_input("Email", "info@enlead.com")
-logo_image = st.sidebar.file_uploader("Upload Company Logo (Png/Jpg)", type=['png', 'jpg', 'jpeg'])
-bg_image = st.sidebar.file_uploader("Upload Cover Art (Optional)", type=['jpg', 'png', 'jpeg'])
+
+st.sidebar.markdown("---")
+st.sidebar.write("**Upload Images Here**")
+logo_image = st.sidebar.file_uploader("Upload Company Logo", type=['png', 'jpg', 'jpeg'])
+bg_image = st.sidebar.file_uploader("Upload Cover Art", type=['jpg', 'png', 'jpeg'])
+
+if logo_image:
+    st.sidebar.text("Logo loaded successfully")
 
 # MAIN AREA
 col1, col2 = st.columns(2)
 with col1:
     cust_name = st.text_input("Customer Name", "Mr. John Doe")
     cust_addr = st.text_input("Location/Address", "Kochi, Kerala")
-    prop_date = st.date_input("Proposal Date", datetime.date.today())
+    prop_date = st.date_input("Date")
 with col2:
     sys_type = st.selectbox("System Type", ["On-Grid (Net Metered)", "Off-Grid (Battery)", "Hybrid System"])
     sys_size = st.text_input("System Capacity", "5kW")
-    # New Valid Until Date (Defaults to 15 days later)
-    valid_until = st.date_input("Valid Until", datetime.date.today() + datetime.timedelta(days=15))
 
 st.subheader("Bill of Materials & Pricing")
 
@@ -177,7 +184,6 @@ default_items = [
 ]
 
 edited_data = st.data_editor(default_items, num_rows="dynamic")
-
 total_val = sum([float(item['Qty']) * float(item['Rate']) for item in edited_data])
 st.metric(label="Total Project Value", value=f"₹ {total_val:,.2f}")
 
@@ -187,7 +193,6 @@ if st.button("Generate PDF Proposal"):
         'name': cust_name, 
         'address': cust_addr, 
         'date': prop_date, 
-        'valid_until': valid_until,
         'system_size': sys_size,
         'system_type': sys_type
     }
