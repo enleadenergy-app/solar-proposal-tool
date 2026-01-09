@@ -1,220 +1,275 @@
 import streamlit as st
-import sys
-import subprocess
+from fpdf import FPDF
+import base64
 import os
-import datetime
+import json
 from PIL import Image
 
-# --- 1. FORCE INSTALL FPDF & PILLOW ---
-try:
-    from fpdf import FPDF
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "fpdf"])
-    from fpdf import FPDF
+# ==========================================
+# 1. CONFIGURATION & CONSTANTS
+# ==========================================
+PROFILE_FILE = "profile_config.json"
+LOGO_FILE = "company_logo.png"
+BG_FILE = "company_bg.png"
 
-# --- 2. PDF GENERATION CLASS ---
-class SolarProposal(FPDF):
-    def __init__(self, company_name, phone, email):
-        super().__init__()
-        self.company_name = company_name
-        self.phone = phone
-        self.email = email
+# ==========================================
+# 2. HELPER FUNCTIONS (DATA MANAGEMENT)
+# ==========================================
 
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.set_text_color(128)
-        footer_text = f"Page {self.page_no()} | {self.company_name} | {self.phone} | {self.email}"
-        self.cell(0, 10, footer_text, 0, 0, 'C')
-
-def create_pdf(company_info, customer_info, items, total_amount, bg_image, logo_image):
-    pdf = SolarProposal(company_info['name'], company_info['phone'], company_info['email'])
-    pdf.set_auto_page_break(auto=True, margin=15)
-
-    # --- PAGE 1: COVER ---
-    pdf.add_page()
-    
-    # 1. Background Image (FULL PAGE)
-    if bg_image:
-        try:
-            img = Image.open(bg_image)
-            img = img.convert('RGB')
-            img.save("temp_bg.jpg")
-            # x=0, y=0, w=210, h=297 (Full A4 Size)
-            pdf.image("temp_bg.jpg", x=0, y=0, w=210, h=297)
-        except Exception as e:
-            st.error(f"Background Image Error: {e}")
-
-    # 2. Company Logo
-    if logo_image:
-        try:
-            logo = Image.open(logo_image)
-            logo = logo.convert('RGB')
-            logo.save("temp_logo.jpg")
-            pdf.image("temp_logo.jpg", x=10, y=10, w=30)
-            pdf.ln(20)
-        except Exception as e:
-            st.error(f"Logo Error: {e}")
-    else:
-        pdf.ln(10)
-
-    # 3. Company Name
-    pdf.set_xy(50, 15)
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, company_info['name'], 0, 1, 'R')
-    pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 5, "Powering a Sustainable Future", 0, 1, 'R')
-
-    # 4. Proposal Title
-    pdf.ln(30)
-    pdf.set_font("Arial", "B", 24)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 10, "SOLAR POWER SYSTEM", 0, 1, 'C')
-    pdf.set_font("Arial", "", 18)
-    pdf.cell(0, 10, "PROJECT PROPOSAL", 0, 1, 'C')
-    
-    pdf.ln(15)
-    
-    # 5. Customer Details Box
-    pdf.set_fill_color(245, 245, 245) 
-    pdf.rect(10, 90, 190, 75, 'F') # Increased height for extra field
-    
-    pdf.set_y(95)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(15)
-    pdf.cell(0, 10, "PREPARED FOR:", 0, 1)
-    
-    pdf.set_font("Arial", "", 12)
-    pdf.cell(15)
-    pdf.cell(0, 8, f"Name: {customer_info['name']}", 0, 1)
-    pdf.cell(15)
-    pdf.cell(0, 8, f"Location: {customer_info['address']}", 0, 1)
-    pdf.cell(15)
-    pdf.cell(0, 8, f"Date: {customer_info['date']}", 0, 1)
-
-    # Valid Until (Red Text)
-    pdf.cell(15)
-    pdf.set_text_color(200, 0, 0)
-    pdf.cell(0, 8, f"Valid Until: {customer_info['valid_until']}", 0, 1)
-    pdf.set_text_color(0, 0, 0)
-    
-    # System Type (Green Text)
-    pdf.ln(2)
-    pdf.cell(15)
-    pdf.set_font("Arial", "B", 12)
-    pdf.set_text_color(0, 100, 0) 
-    pdf.cell(0, 8, f"System Type: {customer_info['system_type']}", 0, 1)
-    pdf.set_text_color(0, 0, 0) 
-
-    # --- PAGE 2: COMMERCIALS ---
-    pdf.add_page()
-    
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, f"System Specification: {customer_info['system_size']} ({customer_info['system_type']})", 0, 1, 'L')
-    pdf.ln(5)
-
-    # Table Header
-    pdf.set_font("Arial", "B", 10)
-    pdf.set_fill_color(230, 240, 255)
-    pdf.cell(15, 10, "#", 1, 0, 'C', 1)
-    pdf.cell(90, 10, "Item Description", 1, 0, 'C', 1)
-    pdf.cell(20, 10, "Qty", 1, 0, 'C', 1)
-    pdf.cell(30, 10, "Price", 1, 0, 'C', 1)
-    pdf.cell(35, 10, "Total", 1, 1, 'C', 1)
-
-    # Table Rows
-    pdf.set_font("Arial", "", 10)
-    for idx, item in enumerate(items):
-        qty = float(item['Qty'])
-        rate = float(item['Rate'])
-        line_total = qty * rate
-        
-        pdf.cell(15, 10, str(idx+1), 1)
-        pdf.cell(90, 10, item['Item'], 1)
-        pdf.cell(20, 10, str(item['Qty']), 1, 0, 'C')
-        pdf.cell(30, 10, f"{rate:,.0f}", 1, 0, 'R')
-        pdf.cell(35, 10, f"{line_total:,.0f}", 1, 1, 'R')
-
-    # Grand Total
-    pdf.ln(5)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(155, 10, "GRAND TOTAL (INR)", 1, 0, 'R')
-    pdf.cell(35, 10, f"{total_amount:,.0f}", 1, 1, 'R')
-    
-    pdf.ln(15)
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 10, "Terms & Conditions:", 0, 1)
-    pdf.set_font("Arial", "", 9)
-    pdf.multi_cell(0, 6, "1. Payment: 70% Advance, 30% upon completion.\n2. Delivery: Within 2 weeks of advance payment.\n3. Warranty: As per manufacturer standards (25 Years Performance on Panels).")
-
-    return pdf.output(dest='S').encode('latin-1')
-
-# --- 3. STREAMLIT UI ---
-st.set_page_config(page_title="Enlead Proposal Tool")
-
-st.title("Solar Proposal Generator")
-st.markdown("Generate a PDF proposal with Logo & System Type.")
-
-# SIDEBAR
-st.sidebar.header("Company Details")
-co_name = st.sidebar.text_input("Company Name", "Enlead Energy Solutions")
-co_phone = st.sidebar.text_input("Phone", "+91-9876543210")
-co_email = st.sidebar.text_input("Email", "info@enlead.com")
-
-st.sidebar.markdown("---")
-st.sidebar.write("**Upload Images Here**")
-logo_image = st.sidebar.file_uploader("Upload Company Logo", type=['png', 'jpg', 'jpeg', 'webp'])
-bg_image = st.sidebar.file_uploader("Upload Cover Art", type=['jpg', 'png', 'jpeg', 'webp'])
-
-if logo_image:
-    st.sidebar.success("Logo Loaded!")
-if bg_image:
-    st.sidebar.success("Cover Art Loaded!")
-
-# MAIN AREA
-col1, col2 = st.columns(2)
-with col1:
-    cust_name = st.text_input("Customer Name", "Mr. John Doe")
-    cust_addr = st.text_input("Location/Address", "Kochi, Kerala")
-    prop_date = st.date_input("Date")
-with col2:
-    sys_type = st.selectbox("System Type", ["On-Grid (Net Metered)", "Off-Grid (Battery)", "Hybrid System"])
-    sys_size = st.text_input("System Capacity", "5kW")
-    # New Valid Until Field (Default: 15 days from now)
-    valid_until = st.date_input("Valid Until", datetime.date.today() + datetime.timedelta(days=15))
-
-st.subheader("Bill of Materials & Pricing")
-
-default_items = [
-    {"Item": "Solar PV Modules (Mono PERC Half Cut)", "Qty": 10, "Rate": 18000},
-    {"Item": "Solar Inverter", "Qty": 1, "Rate": 45000},
-    {"Item": "Mounting Structure (HDG)", "Qty": 1, "Rate": 15000},
-    {"Item": "AC/DC Cables & Earthing Kit", "Qty": 1, "Rate": 12000},
-    {"Item": "Installation & Liaisoning Charges", "Qty": 1, "Rate": 20000},
-]
-
-edited_data = st.data_editor(default_items, num_rows="dynamic")
-total_val = sum([float(item['Qty']) * float(item['Rate']) for item in edited_data])
-st.metric(label="Total Project Value", value=f"₹ {total_val:,.2f}")
-
-if st.button("Generate PDF Proposal"):
-    company_info = {'name': co_name, 'phone': co_phone, 'email': co_email}
-    customer_info = {
-        'name': cust_name, 
-        'address': cust_addr, 
-        'date': prop_date, 
-        'valid_until': valid_until,
-        'system_size': sys_size,
-        'system_type': sys_type
+def load_profile():
+    """Loads profile data from JSON, or returns Enlead defaults if file is missing."""
+    default_data = {
+        "company_name": "Enlead Energy Solutions",
+        "mobile": "+91 98765 43210",
+        "email": "contact@enlead.com",
+        "address": "123 Solar Street, Kochi, Kerala, India",
+        "proposal_heading": "Premium Solar Proposal",
+        "sub_heading": "Sustainable Energy for Your Future"
     }
     
-    pdf_bytes = create_pdf(company_info, customer_info, edited_data, total_val, bg_image, logo_image)
+    if os.path.exists(PROFILE_FILE):
+        try:
+            with open(PROFILE_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return default_data
+    return default_data
+
+def save_profile_data(data):
+    """Saves text data to JSON."""
+    with open(PROFILE_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+def save_image(uploaded_file, destination_filename):
+    """Saves uploaded images locally."""
+    if uploaded_file is not None:
+        try:
+            image = Image.open(uploaded_file)
+            # Convert to RGB to ensure compatibility (removes alpha channel if present)
+            if image.mode in ("RGBA", "P"):
+                image = image.convert("RGB")
+            image.save(destination_filename)
+            return True
+        except Exception as e:
+            st.error(f"Error saving image: {e}")
+            return False
+    return False
+
+def reset_to_defaults():
+    """Deletes all saved files to restore defaults."""
+    if os.path.exists(PROFILE_FILE): os.remove(PROFILE_FILE)
+    if os.path.exists(LOGO_FILE): os.remove(LOGO_FILE)
+    if os.path.exists(BG_FILE): os.remove(BG_FILE)
+
+# ==========================================
+# 3. PDF GENERATION LOGIC
+# ==========================================
+
+def create_pdf(profile, customer_name, monthly_bill, system_size, total_cost, subsidy, net_cost):
+    pdf = FPDF()
+    pdf.add_page()
     
-    if pdf_bytes:
-        st.success("PDF Generated! Click below to download.")
-        st.download_button(
-            label="Download Proposal PDF",
-            data=pdf_bytes,
-            file_name=f"Proposal_{cust_name.replace(' ', '_')}.pdf",
-            mime='application/pdf'
-        )
+    # --- A. BACKGROUND IMAGE ---
+    # Must be added first to sit behind text
+    if os.path.exists(BG_FILE):
+        # x=0, y=0, w=210, h=297 (A4 dimensions in mm)
+        pdf.image(BG_FILE, x=0, y=0, w=210, h=297)
+    
+    # --- B. HEADER & LOGO ---
+    # Add Logo if exists
+    if os.path.exists(LOGO_FILE):
+        pdf.image(LOGO_FILE, x=10, y=8, w=30)
+    
+    # Company Details (Top Right)
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, profile["company_name"], ln=True, align='R')
+    
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 5, profile["address"], ln=True, align='R')
+    pdf.cell(0, 5, f"Ph: {profile['mobile']} | Email: {profile['email']}", ln=True, align='R')
+    
+    pdf.ln(20) # Space after header
+    
+    # --- C. PROPOSAL BODY ---
+    
+    # Title
+    pdf.set_font("Arial", 'B', 20)
+    pdf.cell(0, 10, profile["proposal_heading"], ln=True, align='C')
+    pdf.set_font("Arial", 'I', 12)
+    pdf.cell(0, 10, profile["sub_heading"], ln=True, align='C')
+    
+    pdf.ln(10)
+    
+    # Customer Details Box
+    pdf.set_fill_color(240, 240, 240) # Light gray background
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"Prepared for: {customer_name}", ln=True, align='L', fill=True)
+    
+    pdf.ln(10)
+    
+    # Technical Specs
+    pdf.set_font("Arial", '', 12)
+    pdf.cell(100, 10, f"Average Monthly Bill:", border=1)
+    pdf.cell(0, 10, f"Rs. {monthly_bill}", border=1, ln=True)
+    
+    pdf.cell(100, 10, f"Recommended System Size:", border=1)
+    pdf.cell(0, 10, f"{system_size} kW", border=1, ln=True)
+    
+    pdf.ln(5)
+    
+    # Financials
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(100, 10, f"Total Project Cost:", border=1)
+    pdf.cell(0, 10, f"Rs. {total_cost:,.2f}", border=1, ln=True)
+    
+    pdf.set_text_color(0, 150, 0) # Green color for subsidy
+    pdf.cell(100, 10, f"Estimated Subsidy:", border=1)
+    pdf.cell(0, 10, f"- Rs. {subsidy:,.2f}", border=1, ln=True)
+    
+    pdf.set_text_color(0, 0, 0) # Reset to black
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(100, 12, f"Net Investment:", border=1)
+    pdf.cell(0, 12, f"Rs. {net_cost:,.2f}", border=1, ln=True)
+    
+    # --- D. FOOTER ---
+    pdf.set_y(-30)
+    pdf.set_font("Arial", 'I', 8)
+    pdf.cell(0, 10, "This proposal is an estimate. Final pricing subject to site visit.", align='C')
+
+    # Return PDF as string/bytes
+    return pdf.output(dest='S').encode('latin-1')
+
+# ==========================================
+# 4. MAIN STREAMLIT APPLICATION
+# ==========================================
+
+def main():
+    st.set_page_config(page_title="Solar Proposal Generator", layout="wide")
+
+    # --- LOAD DATA ---
+    profile = load_profile()
+
+    # --- SIDEBAR: SETTINGS & EDITING ---
+    with st.sidebar:
+        st.title("⚙️ Settings")
+        
+        # TAB 1: EDIT PROFILE
+        with st.expander("📝 Edit Company Profile", expanded=False):
+            with st.form("profile_form"):
+                st.subheader("Text Details")
+                new_name = st.text_input("Company Name", value=profile["company_name"])
+                new_mobile = st.text_input("Mobile Number", value=profile["mobile"])
+                new_email = st.text_input("Email ID", value=profile["email"])
+                new_address = st.text_area("Address", value=profile["address"])
+                new_heading = st.text_input("Proposal Heading", value=profile["proposal_heading"])
+                new_sub_heading = st.text_input("Sub-Heading", value=profile["sub_heading"])
+                
+                st.markdown("---")
+                st.subheader("Images")
+                uploaded_logo = st.file_uploader("Logo (Top Left)", type=["png", "jpg", "jpeg"])
+                uploaded_bg = st.file_uploader("PDF Background (A4)", type=["png", "jpg", "jpeg"])
+
+                submitted = st.form_submit_button("💾 Save Changes")
+                if submitted:
+                    # Save Text
+                    updated_data = {
+                        "company_name": new_name,
+                        "mobile": new_mobile,
+                        "email": new_email,
+                        "address": new_address,
+                        "proposal_heading": new_heading,
+                        "sub_heading": new_sub_heading
+                    }
+                    save_profile_data(updated_data)
+                    
+                    # Save Images
+                    if uploaded_logo: save_image(uploaded_logo, LOGO_FILE)
+                    if uploaded_bg: save_image(uploaded_bg, BG_FILE)
+                    
+                    st.success("Profile Updated!")
+                    st.rerun()
+
+        # TAB 2: RESET
+        with st.expander("🗑️ Reset Settings", expanded=False):
+            st.warning("Delete all saved data and restore defaults?")
+            if st.button("🔴 Reset to Default"):
+                reset_to_defaults()
+                st.rerun()
+
+    # --- MAIN DISPLAY AREA ---
+    
+    # Header Section (Dynamic)
+    col_logo, col_info = st.columns([1, 5])
+    with col_logo:
+        if os.path.exists(LOGO_FILE):
+            st.image(LOGO_FILE, width=120)
+        else:
+            st.info("No Logo")
+            
+    with col_info:
+        st.title(profile["company_name"])
+        st.write(f"📍 {profile['address']}")
+        st.write(f"📞 {profile['mobile']} | ✉️ {profile['email']}")
+
+    st.markdown("---")
+
+    # --- CALCULATOR SECTION ---
+    
+    st.subheader("☀️ Solar System Calculator")
+    
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        customer_name = st.text_input("Customer Name")
+        monthly_bill = st.number_input("Monthly Electricity Bill (Rs)", min_value=0, value=3000)
+        
+    with c2:
+        cost_per_kw = st.number_input("Installation Cost per kW (Rs)", value=65000)
+        unit_rate = st.number_input("Electricity Rate (Rs/Unit)", value=7.5)
+
+    # --- CALCULATIONS ---
+    # Assumptions: 1kW generates ~120 units/month in Kerala
+    units_consumed = monthly_bill / unit_rate
+    needed_kw = units_consumed / 120
+    
+    # Rounding up to nearest 0.5 kW
+    system_size = round(needed_kw * 2) / 2
+    if system_size < 1: system_size = 1 # Minimum 1kW
+    
+    # Financials
+    total_cost = system_size * cost_per_kw
+    
+    # Basic Subsidy Logic (Example: 30k for 1kW, 60k for 2kw, 78k for 3kw+)
+    subsidy = 0
+    if system_size == 1: subsidy = 30000
+    elif system_size == 2: subsidy = 60000
+    elif system_size >= 3: subsidy = 78000
+    
+    net_cost = total_cost - subsidy
+
+    # --- RESULTS DISPLAY ---
+    st.markdown("### 📊 Proposal Preview")
+    
+    res_col1, res_col2, res_col3 = st.columns(3)
+    res_col1.metric("Recommended Size", f"{system_size} kW")
+    res_col2.metric("Total Cost", f"₹ {total_cost:,.0f}")
+    res_col3.metric("Net Cost (After Subsidy)", f"₹ {net_cost:,.0f}", delta=f"Subsidy: ₹{subsidy}")
+
+    # --- PDF DOWNLOAD ---
+    st.markdown("---")
+    if st.button("📄 Generate PDF Proposal"):
+        if customer_name:
+            pdf_bytes = create_pdf(profile, customer_name, monthly_bill, system_size, total_cost, subsidy, net_cost)
+            
+            st.download_button(
+                label="⬇️ Download PDF",
+                data=pdf_bytes,
+                file_name=f"Proposal_{customer_name}.pdf",
+                mime="application/pdf"
+            )
+            st.success("PDF Generated Successfully!")
+        else:
+            st.error("Please enter a Customer Name first.")
+
+if __name__ == "__main__":
+    main()
